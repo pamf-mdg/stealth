@@ -11,6 +11,7 @@ require 'stealth/version'
 require 'stealth/errors'
 require 'stealth/logger'
 require 'stealth/configuration'
+require 'stealth/reloader'
 
 module Stealth
 
@@ -23,6 +24,7 @@ module Stealth
   end
 
   def self.boot
+    Stealth::Reloader.init!
     load_environment
   end
 
@@ -58,14 +60,14 @@ module Stealth
     require File.join(Stealth.root, 'config', 'boot')
     require_directory("config/initializers")
     # Require explicitly to ensure it loads first
-    require File.join(Stealth.root, 'bot', 'controllers', 'bot_controller')
+    require_dependency File.join(Stealth.root, 'bot', 'controllers', 'bot_controller')
     require_directory("bot")
   end
 
   private
 
     def self.require_directory(directory)
-      for_each_file_in(directory) { |file| require_relative(file) }
+      for_each_file_in(directory) { |file| require_dependency(file) }
     end
 
     def self.for_each_file_in(directory, &blk)
