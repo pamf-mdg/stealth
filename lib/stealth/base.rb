@@ -23,8 +23,23 @@ module Stealth
     @root ||= File.expand_path(Pathname.new(Dir.pwd))
   end
 
+  def self.reloader
+    @reloader
+  end
+
+  def self.bot_reloader
+    @bot_reloader
+  end
+
+  def self.executor
+    @executor
+  end
+
   def self.boot
-    Stealth::Reloader.init!
+    @reloader = Class.new(ActiveSupport::Reloader)
+    @executor = @reloader.executor
+    @bot_reloader = Stealth::Reloader.new
+
     load_environment
   end
 

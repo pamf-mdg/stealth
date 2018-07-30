@@ -15,7 +15,7 @@ module Stealth
     attr_reader :service, :params, :headers, :message_handler
 
     def initialize(service:, params:, headers:)
-      Stealth::Reloader.clear_dependencies!
+      Stealth.reloader.reload!
 
       @service = service
       @params = params
