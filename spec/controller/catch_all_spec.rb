@@ -1,35 +1,22 @@
-# coding: utf-8
 # frozen_string_literal: true
 
-require File.expand_path(File.join(File.dirname(__FILE__), '..', '/spec_helper'))
+require 'spec_helper'
 
 describe "Stealth::Controller::CatchAll" do
-
-  class VadersController < Stealth::Controller
-    def my_action
-      raise "oops"
-    end
-
-    def my_action2
-
-    end
-
-    def my_action3
-      do_nothing
-    end
-  end
+  $msg = nil
 
   class StubbedCatchAllsController < Stealth::Controller
     def level1
-
+      $msg = current_message
+      do_nothing
     end
 
     def level2
-
+      do_nothing
     end
 
     def level3
-
+      do_nothing
     end
   end
 
@@ -40,6 +27,8 @@ describe "Stealth::Controller::CatchAll" do
       state :my_action
       state :my_action2
       state :my_action3
+      state :action_with_unrecognized_msg
+      state :action_with_unrecognized_match
     end
 
     flow :catch_all do
@@ -64,30 +53,26 @@ describe "Stealth::Controller::CatchAll" do
     it "should step_to catch_all->level1 when a StandardError is raised" do
       controller.current_session.session = Stealth::Session.canonical_session_slug(flow: 'vader', state: 'my_action')
       controller.action(action: :my_action)
-      expect(controller.current_session.flow_string).to eq("catch_all")
-      expect(controller.current_session.state_string).to eq("level1")
+      expect($redis.get(controller.current_session.session_key)).to eq('catch_all->level1')
     end
 
     it "should step_to catch_all->level1 when an action doesn't progress the flow" do
       controller.current_session.session = Stealth::Session.canonical_session_slug(flow: 'vader', state: 'my_action2')
       controller.action(action: :my_action2)
-      expect(controller.current_session.flow_string).to eq("catch_all")
-      expect(controller.current_session.state_string).to eq("level1")
+      expect($redis.get(controller.current_session.session_key)).to eq('catch_all->level1')
     end
 
     it "should step_to catch_all->level2 when an action raises back to back" do
       controller.step_to flow: :vader, state: :my_action
       controller.step_to flow: :vader, state: :my_action
-      expect(controller.current_session.flow_string).to eq("catch_all")
-      expect(controller.current_session.state_string).to eq("level2")
+      expect($redis.get(controller.current_session.session_key)).to eq('catch_all->level2')
     end
 
     it "should step_to catch_all->level3 when an action raises back to back to back" do
       controller.step_to flow: :vader, state: :my_action
       controller.step_to flow: :vader, state: :my_action
       controller.step_to flow: :vader, state: :my_action
-      expect(controller.current_session.flow_string).to eq("catch_all")
-      expect(controller.current_session.state_string).to eq("level3")
+      expect($redis.get(controller.current_session.session_key)).to eq('catch_all->level3')
     end
 
     it "should just stop after the maximum number of catch_all levels have been reached" do
@@ -95,15 +80,64 @@ describe "Stealth::Controller::CatchAll" do
       controller.step_to flow: :vader, state: :my_action
       controller.step_to flow: :vader, state: :my_action
       controller.step_to flow: :vader, state: :my_action
-      expect(controller.current_session.flow_string).to eq("vader")
-      expect(controller.current_session.state_string).to eq("my_action")
+      expect($redis.get(controller.current_session.session_key)).to eq('vader->my_action')
     end
 
     it "should NOT run the catch_all if do_nothing is called" do
-      controller.current_session.session = Stealth::Session.canonical_session_slug(flow: 'vader', state: 'my_action3')
+      controller.current_session.set_session(new_flow: 'vader', new_state: 'my_action3')
       controller.action(action: :my_action3)
-      expect(controller.current_session.flow_string).to eq("vader")
-      expect(controller.current_session.state_string).to eq("my_action3")
+      expect($redis.get(controller.current_session.session_key)).to eq('vader->my_action3')
+    end
+
+    describe "catch_alls from within catch_all flow" do
+      before(:each) do
+        controller.current_session.session = Stealth::Session.canonical_session_slug(flow: 'catch_all', state: 'level1')
+      end
+
+      it "should not step_to to catch_all" do
+        expect(controller).to_not receive(:step_to)
+        controller.run_catch_all
+      end
+
+      it "should return false" do
+        expect(controller.run_catch_all).to be false
+      end
+
+      it "should log the error message" do
+        expect(Stealth::Logger).to receive(:l).with(topic: 'catch_all', message: "CatchAll level1 triggered for error-#{controller.current_session_id}-catch_all-level1: ")
+        expect(Stealth::Logger).to receive(:l).with(topic: 'catch_all', message: 'CatchAll triggered from within CatchAll; ignoring.')
+        controller.run_catch_all
+      end
+    end
+
+    describe "catch_all_reason" do
+      before(:each) do
+        @session = Stealth::Session.new(id: controller.current_session_id)
+        @session.set_session(new_flow: 'vader', new_state: 'my_action2')
+      end
+
+      after(:each) do
+        $msg = nil
+      end
+
+      it 'should have access to the error raised in current_message.catch_all_reason' do
+        controller.action(action: :my_action)
+        expect($msg.catch_all_reason).to be_a(Hash)
+        expect($msg.catch_all_reason[:err]).to eq(RuntimeError)
+        expect($msg.catch_all_reason[:err_msg]).to eq('oops')
+      end
+
+      it 'should have the correct error when handle_message fails to recognize a message' do
+        controller.action(action: :action_with_unrecognized_msg)
+        expect($msg.catch_all_reason[:err]).to eq(Stealth::Errors::MessageNotRecognized)
+        expect($msg.catch_all_reason[:err_msg]).to eq("The reply '#{facebook_message.message_with_text.message}' was not recognized.")
+      end
+
+      it 'should have the correct error when get_match fails to recognize a message' do
+        controller.action(action: :action_with_unrecognized_match)
+        expect($msg.catch_all_reason[:err]).to eq(Stealth::Errors::MessageNotRecognized)
+        expect($msg.catch_all_reason[:err_msg]).to eq("The reply '#{facebook_message.message_with_text.message}' was not recognized.")
+      end
     end
   end
 end

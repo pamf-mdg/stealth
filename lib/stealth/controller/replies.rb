@@ -12,17 +12,32 @@ module Stealth
         class_attribute :_preprocessors, default: [:erb]
         class_attribute :_replies_path, default: [Stealth.root, 'bot', 'replies']
 
-        def send_replies
-          yaml_reply, preprocessor = action_replies
+        def send_replies(custom_reply: nil, inline: nil)
+          if inline.present?
+            service_reply = Stealth::ServiceReply.new(
+              recipient_id: current_session_id,
+              yaml_reply: inline,
+              preprocessor: :none,
+              context: nil
+            )
+          else
+            yaml_reply, preprocessor = action_replies(custom_reply)
 
-          service_reply = Stealth::ServiceReply.new(
-            recipient_id: current_session_id,
-            yaml_reply: yaml_reply,
-            preprocessor: preprocessor,
-            context: binding
-          )
+            service_reply = Stealth::ServiceReply.new(
+              recipient_id: current_session_id,
+              yaml_reply: yaml_reply,
+              preprocessor: preprocessor,
+              context: binding
+            )
+          end
 
           service_reply.replies.each_with_index do |reply, i|
+            # Updates the lock with the current position of the reply
+            lock_session!(
+              session_slug: current_session.get_session,
+              position: i
+            )
+
             # Support randomized replies for text and speech replies.
             # We select one before handing the reply off to the driver.
             if reply['text'].is_a?(Array)
@@ -37,6 +52,10 @@ module Stealth
             translated_reply = handler.send(reply.reply_type)
             client = service_client.new(reply: translated_reply)
             client.transmit
+
+            if Stealth.config.transcript_logging
+              log_reply(reply)
+            end
 
             # If this was a 'delay' type of reply, we insert the delay
             if reply.reply_type == 'delay'
@@ -61,6 +80,7 @@ module Stealth
           end
 
           @progressed = :sent_replies
+          release_lock!
         end
 
         private
@@ -93,17 +113,36 @@ module Stealth
             "#{current_session.state_string}.yml"
           end
 
-          def reply_filenames
-            service_filename = [base_reply_filename, current_service].join('+')
+          def reply_filenames(custom_reply_filename=nil)
+            reply_filename = if custom_reply_filename.present?
+              custom_reply_filename
+            else
+              base_reply_filename
+            end
+
+            service_filename = [reply_filename, current_service].join('+')
 
             # Service-specific filenames take precedance (returned first)
-            [service_filename, base_reply_filename]
+            [service_filename, reply_filename]
           end
 
-          def find_reply_and_preprocessor
+          def find_reply_and_preprocessor(custom_reply)
             selected_preprocessor = :none
-            reply_file_path = File.join(*reply_dir, base_reply_filename)
-            service_reply_path = File.join(*reply_dir, reply_filenames.first)
+
+            if custom_reply.present?
+              dir_and_file = custom_reply.rpartition(File::SEPARATOR)
+              _dir = dir_and_file.first
+              _file = "#{dir_and_file.last}.yml"
+              _replies_dir = [*self._replies_path, _dir]
+              possible_filenames = reply_filenames(_file)
+              reply_file_path = File.join(_replies_dir, _file)
+              service_reply_path = File.join(_replies_dir, reply_filenames(_file).first)
+            else
+              _replies_dir = *reply_dir
+              possible_filenames = reply_filenames
+              reply_file_path = File.join(_replies_dir, base_reply_filename)
+              service_reply_path = File.join(_replies_dir, reply_filenames.first)
+            end
 
             # Check if the service_filename exists
             # If so, we can skip checking for a preprocessor
@@ -114,8 +153,8 @@ module Stealth
             # Cycles through possible preprocessor and variant combinations
             # Early returns for performance
             for preprocessor in self.class._preprocessors do
-              for reply_filename in reply_filenames do
-                selected_filepath = File.join(*reply_dir, [reply_filename, preprocessor.to_s].join('.'))
+              for reply_filename in possible_filenames do
+                selected_filepath = File.join(_replies_dir, [reply_filename, preprocessor.to_s].join('.'))
                 if File.exist?(selected_filepath)
                   reply_file_path = selected_filepath
                   selected_preprocessor = preprocessor
@@ -127,16 +166,32 @@ module Stealth
             return reply_file_path, selected_preprocessor
           end
 
-          def action_replies
-            reply_file_path, selected_preprocessor = find_reply_and_preprocessor
+          def action_replies(custom_reply=nil)
+            reply_path, selected_preprocessor = find_reply_and_preprocessor(custom_reply)
 
             begin
-              file_contents = File.read(reply_file_path)
+              file_contents = File.read(reply_path)
             rescue Errno::ENOENT
-              raise(Stealth::Errors::ReplyNotFound, "Could not find a reply in #{reply_dir}")
+              raise(Stealth::Errors::ReplyNotFound, "Could not find reply: '#{reply_path}'")
             end
 
             return file_contents, selected_preprocessor
+          end
+
+          def log_reply(reply)
+            message = case reply.reply_type
+                      when 'text', 'speech'
+                        reply['text']
+                      when 'delay'
+                        '<typing indicator>'
+                      else
+                        "<#{reply.reply_type}>"
+                      end
+
+            Stealth::Logger.l(
+              topic: current_service,
+              message: "User #{current_session_id} -> Sending: #{message}"
+            )
           end
 
       end # instance methods

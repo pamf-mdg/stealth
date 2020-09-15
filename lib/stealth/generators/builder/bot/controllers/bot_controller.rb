@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 class BotController < Stealth::Controller
 
   helper :all
@@ -9,6 +11,13 @@ class BotController < Stealth::Controller
       current_message.payload = nil
       return
     end
+
+    # Allow devs to jump around flows and states by typing:
+    #   /flow_name/state_name or
+    #   /flow_name (jumps to first state) or
+    #   //state_name (jumps to state in current flow)
+    # (only works for bots in development)
+    return if dev_jump_detected?
 
     if current_session.present?
       step_to session: current_session

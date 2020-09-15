@@ -30,7 +30,7 @@ module Stealth
     end
 
     get_or_post '/incoming/:service' do
-      Stealth::Logger.l(topic: "incoming", message: "Received webhook from #{params[:service]}")
+      Stealth::Logger.l(topic: params[:service], message: 'Received webhook.')
 
       # JSON params need to be parsed and added to the params
       if request.env['CONTENT_TYPE']&.match(/application\/json/i)
@@ -50,8 +50,8 @@ module Stealth
     private
 
       def get_helpers_from_request(request)
-        request.env.reject do |header, value|
-          header.match(/rack\.|puma\.|sinatra\./)
+        request.env.select do |header, value|
+          %w[HTTP_HOST].include?(header)
         end
       end
 

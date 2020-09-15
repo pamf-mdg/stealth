@@ -1,9 +1,8 @@
 # <a href='https://hellostealth.org'><img src='logo.svg' height='120' alt='Stealth Logo' aria-label='hellostealth.org' /></a>
 
-Stealth is a Ruby based framework for creating voice & text chatbots. It's design is inspired by Ruby on Rails's philosophy of convention over configuration. It has an MVC architecture with the slight caveat that `views` are aptly named `replies`.
+Stealth is an open source Ruby framework for creating text and voice chatbots. It's design is inspired by Ruby on Rails's philosophy of convention over configuration. It has an MVC architecture with the slight caveat that `views` are aptly named `replies`.
 
-[![Gem Version](https://badge.fury.io/rb/stealth.svg)](https://badge.fury.io/rb/stealth)
-[![CircleCI](https://circleci.com/gh/hellostealth/stealth/tree/master.svg?style=shield)](https://circleci.com/gh/hellostealth/stealth/tree/master)
+[![CircleCI](https://circleci.com/gh/whoisblackops/stealth.svg?style=svg&circle-token=63fb0f94994daf358fab46dd716e4da3578fd530)](https://circleci.com/gh/whoisblackops/stealth)
 
 ## Features
 
@@ -45,22 +44,12 @@ Currently, there are gems for:
 
 ## Docs
 
-You can find our full docs [here](https://hellostealth.org/docs). If something is not clear in the docs, please file an issue! We consider all shortcomings in the docs as bugs.
+You can find our full docs [here](https://hellostealth.org/docs/). If something is not clear in the docs, please file an issue! We consider all shortcomings in the docs as bugs.
 
-## Thanks
+## Versioning
 
-Stealth wouldn't exist without the great work of many other open source projects and people including:
-
-* [Ruby](https://www.ruby-lang.org/) for creating our favorite programming language;
-* [Ruby on Rails](http://rubyonrails.org) for projects like `ActiveRecord` and serving as an inspiration;
-* [Thor](http://whatisthor.com) for providing us with CLI tools and generators;
-* [Sinatra](http://sinatrarb.com) for providing a fantastic, modular way for handling HTTP requests;
-* [Sidekiq](https://sidekiq.org) for the super quick background jobs;
-* [standalone-migrations](https://github.com/thuss/standalone-migrations) for the help with Rails migrations;
-* [Dr. Robert Ford](http://westworld.wikia.com/wiki/Robert_Ford) a.k.a. Anthony Hopkins.
+Stealth is versioned uses [Semantic Versioning](https://semver.org), but it's more like the Linux Kernel. Major version releases are just as arbitrary as minor version releases. We strive to never break anything with any version change. Patches are still issues as the "third dot" in the version string.
 
 ## License
 
-"Stealth" and the Stealth logo are copyright (c) 2018 The Black Ops Bureau Inc.
-
-Stealth source code is released under the MIT License.
+"Stealth" and the Stealth logo are copyright (c) 2019 The Black Ops Bureau Inc.
